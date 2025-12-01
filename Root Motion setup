@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -24,14 +23,17 @@ function RootMotion.new(rootPart, rootJoint)
 end
 
 function RootMotion:Play(track)
+	if self.disabled then return end
 	self.active = true
 	self.currentTrack = track
 
 	track:GetMarkerReachedSignal("Loop"):Connect(function()
+		if self.disabled then return end
 		self.lastTransform = self.RootJoint.Transform
 	end)
 
 	track.Stopped:Connect(function()
+		if self.disabled then return end
 		self.active = false
 		self.lastTransform = self.RootJoint.Transform
 	end)
@@ -40,32 +42,51 @@ function RootMotion:Play(track)
 end
 
 function RootMotion:Enable()
-	if self.Connection then return end
+	if self.Connection or self.disabled then return end
 	self.lastTransform = self.RootJoint.Transform
 	self.Connection = RunService.Stepped:Connect(function()
-		if not self.active then return end
+		if self.disabled or not self.active then return end
+
 		local current = self.RootJoint.Transform
 		local delta = self.lastTransform:ToObjectSpace(current)
 		self.lastTransform = current
+
 		local move = Vector3.new(delta.X, 0, delta.Z)
 		self.RootPart.CFrame = self.RootPart.CFrame * CFrame.new(move)
+
 		local _, y = delta:ToOrientation()
 		if y ~= 0 then
 			self.RootPart.CFrame = self.RootPart.CFrame * CFrame.Angles(0, y, 0)
 		end
+
 		self.RootJoint.Transform = CFrame.new()
 	end)
 end
 
 local controller = RootMotion.new(rootPart, rootJoint)
 
-animator.AnimationPlayed:Connect(function(track)
+local animConnection
+animConnection = animator.AnimationPlayed:Connect(function(track)
+	if controller.disabled then return end
+
 	controller:Play(track)
--- don't edit animation here !!!
-local Anim = Instance.new("Animation")
-Anim.AnimationId = "rbxassetid://100203839720961"
-local Track = game.Players.LocalPlayer.Character.Humanoid:LoadAnimation(Anim)
-Track:Play()
-Track:AdjustSpeed(0)
-Track:AdjustWeight(10)
+    -- don't edit the animation here, its what makes it work
+	local Anim = Instance.new("Animation")
+	Anim.AnimationId = "rbxassetid://100203839720961"
+	local Track = humanoid:LoadAnimation(Anim)
+	Track:Play()
+	Track:AdjustSpeed(0)
+	Track:AdjustWeight(10)
+end)
+
+player.CharacterAdded:Once(function()
+	controller.disabled = true
+
+	if controller.Connection then
+		controller.Connection:Disconnect()
+	end
+
+	if animConnection then
+		animConnection:Disconnect()
+	end
 end)
