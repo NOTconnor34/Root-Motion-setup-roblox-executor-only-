@@ -1,0 +1,71 @@
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+local rootJoint = rootPart:FindFirstChild("RootJoint") or character:WaitForChild("LowerTorso"):FindFirstChild("Root")
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+
+local RootMotion = {}
+RootMotion.__index = RootMotion
+
+function RootMotion.new(rootPart, rootJoint)
+	local self = setmetatable({}, RootMotion)
+	self.RootPart = rootPart
+	self.RootJoint = rootJoint
+	self.lastTransform = rootJoint.Transform
+	self.active = false
+	self.Connection = nil
+	self.currentTrack = nil
+	return self
+end
+
+function RootMotion:Play(track)
+	self.active = true
+	self.currentTrack = track
+
+	track:GetMarkerReachedSignal("Loop"):Connect(function()
+		self.lastTransform = self.RootJoint.Transform
+	end)
+
+	track.Stopped:Connect(function()
+		self.active = false
+		self.lastTransform = self.RootJoint.Transform
+	end)
+
+	if not self.Connection then self:Enable() end
+end
+
+function RootMotion:Enable()
+	if self.Connection then return end
+	self.lastTransform = self.RootJoint.Transform
+	self.Connection = RunService.Stepped:Connect(function()
+		if not self.active then return end
+		local current = self.RootJoint.Transform
+		local delta = self.lastTransform:ToObjectSpace(current)
+		self.lastTransform = current
+		local move = Vector3.new(delta.X, 0, delta.Z)
+		self.RootPart.CFrame = self.RootPart.CFrame * CFrame.new(move)
+		local _, y = delta:ToOrientation()
+		if y ~= 0 then
+			self.RootPart.CFrame = self.RootPart.CFrame * CFrame.Angles(0, y, 0)
+		end
+		self.RootJoint.Transform = CFrame.new()
+	end)
+end
+
+local controller = RootMotion.new(rootPart, rootJoint)
+
+animator.AnimationPlayed:Connect(function(track)
+	controller:Play(track)
+-- don't edit animation here !!!
+local Anim = Instance.new("Animation")
+Anim.AnimationId = "rbxassetid://100203839720961"
+local Track = game.Players.LocalPlayer.Character.Humanoid:LoadAnimation(Anim)
+Track:Play()
+Track:AdjustSpeed(0)
+Track:AdjustWeight(10)
+end)
