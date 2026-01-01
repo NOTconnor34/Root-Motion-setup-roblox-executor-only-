@@ -1,92 +1,62 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local rootPart = character:WaitForChild("HumanoidRootPart")
-local rootJoint = rootPart:FindFirstChild("RootJoint") or character:WaitForChild("LowerTorso"):FindFirstChild("Root")
-local humanoid = character:WaitForChild("Humanoid")
-local animator = humanoid:WaitForChild("Animator")
+local LocalPlayer = Players.LocalPlayer
 
-local RootMotion = {}
-RootMotion.__index = RootMotion
+local Character
+local Humanoid
+local Animator
+local HRP
+local RootJoint
 
-function RootMotion.new(rootPart, rootJoint)
-	local self = setmetatable({}, RootMotion)
-	self.RootPart = rootPart
-	self.RootJoint = rootJoint
-	self.lastTransform = rootJoint.Transform
-	self.active = false
-	self.Connection = nil
-	self.currentTrack = nil
-	return self
+local StartTransform
+local ActiveTrack
+
+local function setupCharacter(char)
+	Character = char
+	Humanoid = Character:WaitForChild("Humanoid")
+	Animator = Humanoid:WaitForChild("Animator")
+	HRP = Character:WaitForChild("HumanoidRootPart")
+
+	if Humanoid.RigType == Enum.HumanoidRigType.R15 then
+		RootJoint = Character:WaitForChild("LowerTorso"):WaitForChild("Root")
+	else
+		RootJoint = Character:WaitForChild("Torso"):WaitForChild("RootJoint")
+	end
 end
 
-function RootMotion:Play(track)
-	if self.disabled then return end
-	self.active = true
-	self.currentTrack = track
-
-	track:GetMarkerReachedSignal("Loop"):Connect(function()
-		if self.disabled then return end
-		self.lastTransform = self.RootJoint.Transform
-	end)
-
-	track.Stopped:Connect(function()
-		if self.disabled then return end
-		self.active = false
-		self.lastTransform = self.RootJoint.Transform
-	end)
-
-	if not self.Connection then self:Enable() end
+local function beginRootMotion(track)
+	StartTransform = RootJoint.Transform
 end
 
-function RootMotion:Enable()
-	if self.Connection or self.disabled then return end
-	self.lastTransform = self.RootJoint.Transform
-	self.Connection = RunService.Stepped:Connect(function()
-		if self.disabled or not self.active then return end
+local function endRootMotion()
+	if not StartTransform then return end
+	local delta = StartTransform:Inverse() * RootJoint.Transform
+	HRP.CFrame = HRP.CFrame * delta
+	RootJoint.Transform = CFrame.identity
+	StartTransform = nil
+	ActiveTrack = nil
+end
 
-		local current = self.RootJoint.Transform
-		local delta = self.lastTransform:ToObjectSpace(current)
-		self.lastTransform = current
-
-		local move = Vector3.new(delta.X, 0, delta.Z)
-		self.RootPart.CFrame = self.RootPart.CFrame * CFrame.new(move)
-
-		local _, y = delta:ToOrientation()
-		if y ~= 0 then
-			self.RootPart.CFrame = self.RootPart.CFrame * CFrame.Angles(0, y, 0)
+local function hookAnimator()
+	Animator.AnimationPlayed:Connect(function(track)
+		if track.Name:match("Walk") or track.Name:match("Run") or track.Name:match("Jump") or track.Name:match("Fall") then
+			return
 		end
-
-		self.RootJoint.Transform = CFrame.new()
+		track.Looped = false
+		ActiveTrack = track
+		beginRootMotion(track)
+		track.Stopped:Once(endRootMotion)
 	end)
 end
 
-local controller = RootMotion.new(rootPart, rootJoint)
+if LocalPlayer.Character then
+	setupCharacter(LocalPlayer.Character)
+	hookAnimator()
+end
 
-local animConnection
-animConnection = animator.AnimationPlayed:Connect(function(track)
-	if controller.disabled then return end
-
-	controller:Play(track)
-    -- don't edit the animation here, its what makes it work
-	local Anim = Instance.new("Animation")
-	Anim.AnimationId = "rbxassetid://100203839720961"
-	local Track = humanoid:LoadAnimation(Anim)
-	Track:Play()
-	Track:AdjustSpeed(0)
-	Track:AdjustWeight(10)
-end)
-
-player.CharacterAdded:Once(function()
-	controller.disabled = true
-
-	if controller.Connection then
-		controller.Connection:Disconnect()
-	end
-
-	if animConnection then
-		animConnection:Disconnect()
-	end
+LocalPlayer.CharacterAdded:Connect(function(char)
+	task.wait(1)
+	setupCharacter(char)
+	hookAnimator()
 end)
