@@ -1,0 +1,79 @@
+-- full root motion 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local Character
+local Humanoid
+local Animator
+local HRP
+local RootJoint
+
+local LastTransform
+local RootMotionActive = false
+local ActiveTrack
+
+local function setupCharacter(char)
+	Character = char
+	Humanoid = Character:WaitForChild("Humanoid")
+	Animator = Humanoid:WaitForChild("Animator")
+	HRP = Character:WaitForChild("HumanoidRootPart")
+
+	if Humanoid.RigType == Enum.HumanoidRigType.R15 then
+		RootJoint = Character:WaitForChild("LowerTorso"):WaitForChild("Root")
+	else
+		RootJoint = Character:WaitForChild("Torso"):WaitForChild("RootJoint")
+	end
+end
+
+local function beginRootMotion()
+	LastTransform = RootJoint.Transform
+	RootMotionActive = true
+end
+
+local function endRootMotion()
+	if RootMotionActive then
+		local current = RootJoint.Transform
+		local delta = LastTransform:Inverse() * current
+		HRP.CFrame = HRP.CFrame * delta
+	end
+	RootMotionActive = false
+	RootJoint.Transform = CFrame.identity
+	if ActiveTrack then
+		ActiveTrack:AdjustWeight(0, 0)
+		ActiveTrack = nil
+	end
+end
+
+local function hookAnimator()
+	Animator.AnimationPlayed:Connect(function(track)
+		if track.Name:match("Walk") or track.Name:match("Run") or track.Name:match("Jump") or track.Name:match("Fall") then
+			return
+		end
+		track.Looped = false
+		ActiveTrack = track
+		beginRootMotion()
+		track.Stopped:Once(endRootMotion)
+	end)
+end
+
+if LocalPlayer.Character then
+	setupCharacter(LocalPlayer.Character)
+	hookAnimator()
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	task.wait(1)
+	setupCharacter(char)
+	hookAnimator()
+end)
+
+RunService.RenderStepped:Connect(function()
+	if not RootMotionActive then return end
+	if not ActiveTrack then return end
+	local current = RootJoint.Transform
+	local delta = LastTransform:Inverse() * current
+	HRP.CFrame = HRP.CFrame * delta
+	LastTransform = current
+end)
