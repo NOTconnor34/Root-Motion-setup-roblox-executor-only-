@@ -41,7 +41,7 @@ local function endRootMotion()
 	RootMotionActive = false
 	RootJoint.Transform = CFrame.identity
 	if ActiveTrack then
-		ActiveTrack:AdjustWeight(0, 0)
+		ActiveTrack:AdjustWeight(10, 10)
 		ActiveTrack = nil
 	end
 end
